@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kairos-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "pydantic>=2.11,<3",
+  "httpx>=0.28,<1",
+]
+
+[project.scripts]
+kairos-api = "kairos.bootstrap:serve"
+kairos-dev = "kairos.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "mypy>=1.15", "ruff>=0.11"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kairos"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+mypy_path = "src"
+packages = ["kairos"]
+plugins = ["pydantic.mypy"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "DTZ", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
