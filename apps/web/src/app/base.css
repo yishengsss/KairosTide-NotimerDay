@@ -1,0 +1,18 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #0d1420;
+  overflow: hidden;
+  color-scheme: dark;
+}
+body.idle {
+  cursor: none;
+}
+#app {
+  height: 100%;
+}
+/* Preview screenshots: no fade-in, so a capture is never taken mid-transition. */
+.shot canvas {
+  transition: none !important;
+}
