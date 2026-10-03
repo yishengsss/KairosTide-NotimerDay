@@ -110,6 +110,15 @@ KairosTide是一个**弱化钟表的自然场景**，而不是日历、待办或
 
 ## 快速开始
 
+一键方式（macOS）：
+
+```bash
+bash scripts/setup.sh    # 检查工具、安装依赖、生成 services/api/.env（可输入 MIMO_API_KEY）
+bash scripts/start.sh    # 启动 API + 首页；加 --demo 写入演示事件
+```
+
+手动方式：
+
 ```bash
 # 1. 克隆
 git clone https://github.com/yishengsss/KairosTide-NotimerDay.git
