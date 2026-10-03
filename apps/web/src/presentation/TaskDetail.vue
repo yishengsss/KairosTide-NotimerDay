@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * The detail of one saved task, opened by tapping its resident. The only place lifecycle moves:
- * 开始 / 暂停 / 完成 / 撤销完成 are buttons the user presses; nothing here is the assistant's.
+ * 开始 / 先放下 / 完成 / 撤销完成 are buttons the user presses; nothing here is the assistant's.
  * No countdown, no nagging copy — an overdue deadline is stated once, plainly.
  */
 import { computed } from 'vue'
@@ -23,7 +23,7 @@ const due = computed(() => {
 
 const ACTIONS: Record<Lifecycle, { label: string; target: Lifecycle }[]> = {
   planned: [{ label: '开始', target: 'active' }, { label: '完成', target: 'done' }],
-  active: [{ label: '完成', target: 'done' }, { label: '暂停', target: 'planned' }],
+  active: [{ label: '完成', target: 'done' }, { label: '先放下', target: 'planned' }],
   done: [{ label: '撤销完成', target: 'active' }],
 }
 </script>

@@ -198,7 +198,7 @@ describe('事件生灵接入首页', () => {
 
   it('首页把站位交给场景，场景不知道它是事件', () => {
     expect(read('app/App.vue')).toMatch(/@marks="onMarks"/)
-    expect(read('app/App.vue')).toMatch(/engine\?\.setMarks\(marks\)/)
+    expect(read('app/App.vue')).toMatch(/engine\?\.setMarks\(\[...eventMarks.value, ...taskMarks.value\]\)/)
     // 业务词汇不得进入 scene/：引擎只认「标记」，不认事件、提醒或日程。注释里说明"不认识"不算。
     const code = read('scene/pastoral/engine.ts')
       .split('\n')

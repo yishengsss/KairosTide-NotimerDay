@@ -120,6 +120,9 @@ const snail = onGround((context, input) => {
   context.stroke()
 }, 13)
 
+/** Shore animals are drawn at bird size; this brings them up to the pond residents' presence. */
+const SHORE_SCALE = 1.6
+
 const BODIES: Record<TaskSpeciesKey, Body> = { sparrow, cicada, squirrel, tit, cricket, owl, snail }
 
 /** One shore resident with the origin at its feet; the gesture is a slow sway or hop, never a pulse. */
@@ -127,6 +130,8 @@ export function drawShore(key: TaskSpeciesKey, input: DrawContext): void {
   const { context, time, phase } = input
   const drift = phase * 6.283
   context.save()
+  // The bank is farther than the open water, but these animals are smaller still: scale up to read.
+  context.scale(SHORE_SCALE, SHORE_SCALE)
   if (key === 'cicada' || key === 'owl') context.rotate(Math.sin(time * 0.4 + drift) * 0.04)
   else if (key === 'snail') context.translate(Math.sin(time * 0.15 + drift) * 2, 0)
   else context.translate(0, -Math.max(0, Math.sin(time * 0.9 + drift)) * 1.5)
