@@ -8,6 +8,7 @@
  * palette, and each has a night value so the animal is never lit from nowhere after dark.
  */
 
+import { drawShore, SHORE_SIZE } from './shore.ts'
 import type { SpeciesKey } from './species.ts'
 
 export type DrawContext = {
@@ -336,11 +337,13 @@ export function drawSpecies(key: SpeciesKey, input: DrawContext): void {
       context.rotate(Math.sin(time * 0.3 + drift) * 0.05)
       crane(context, input)
       break
+    default:
+      drawShore(key, input)
   }
   context.restore()
 }
 
 /** Nominal width of each resident in art pixels: hit targets and spacing between marks. */
 export const SPECIES_SIZE: Record<SpeciesKey, number> = {
-  duck: 62, butterfly: 30, dragonfly: 34, egret: 68, frog: 44, firefly: 52, crane: 62,
+  duck: 62, butterfly: 30, dragonfly: 34, egret: 68, frog: 44, firefly: 52, crane: 62, ...SHORE_SIZE,
 }

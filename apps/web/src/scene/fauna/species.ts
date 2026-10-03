@@ -11,7 +11,11 @@ import { inTerms } from '../pastoral/math.ts'
 import type { PastoralState } from '../pastoral/model.ts'
 
 export const SPECIES = ['duck', 'butterfly', 'dragonfly', 'egret', 'frog', 'firefly', 'crane'] as const
-export type SpeciesKey = (typeof SPECIES)[number]
+/** Flexible tasks get their own residents, on the shore and in the air (M3 plan §2.6). */
+export const TASK_SPECIES = ['sparrow', 'cicada', 'squirrel', 'tit', 'cricket', 'owl', 'snail'] as const
+export type TaskSpeciesKey = (typeof TASK_SPECIES)[number]
+export type SpeciesKey = (typeof SPECIES)[number] | TaskSpeciesKey
+export type MarkKind = 'event' | 'task'
 
 /** Below this the scene reads as night: the same daylight value the firefly and cricket channels use. */
 export const NIGHT_DAY = 0.35
@@ -24,6 +28,8 @@ export type SpeciesContext = {
   frozen: boolean
   /** Rain or snow is falling. */
   wet: boolean
+  /** Snow, specifically: the tit keeps the shore then, where rain brings out the snail. */
+  snow: boolean
 }
 
 export function speciesContext(state: PastoralState): SpeciesContext {
@@ -32,6 +38,7 @@ export function speciesContext(state: PastoralState): SpeciesContext {
     term: state.term,
     frozen: state.pondFrozen > 0.5,
     wet: Math.max(state.weather.rain, state.weather.snow) > 0.05,
+    snow: state.weather.snow > 0.05,
   }
 }
 
@@ -39,6 +46,22 @@ export function speciesContext(state: PastoralState): SpeciesContext {
  * Who could stand on this water right now, best match first. Never empty — the duck is a resident.
  * The windows are `model.ts`'s own: butterflies 清明–小满, fireflies 夏至–处暑, frogs 立夏–立秋.
  */
+/**
+ * The one shore resident for a task right now. Seasons by solar term (0 = 春分): 清明–小满 sparrow,
+ * 立夏–处暑 cicada, 立秋–霜降 squirrel, otherwise tit; nights are crickets in the summer half and
+ * an owl in the winter half. Weather wins over season.
+ */
+export function taskSpecies(ctx: SpeciesContext): TaskSpeciesKey {
+  if (ctx.snow) return 'tit'
+  if (ctx.wet) return 'snail'
+  const summerHalf = inTerms(ctx.term, 0, 11)
+  if (ctx.day < NIGHT_DAY) return summerHalf ? 'cricket' : 'owl'
+  if (inTerms(ctx.term, 1, 4)) return 'sparrow'
+  if (inTerms(ctx.term, 5, 10)) return 'cicada'
+  if (inTerms(ctx.term, 11, 17)) return 'squirrel'
+  return 'tit'
+}
+
 export function candidates(ctx: SpeciesContext): SpeciesKey[] {
   // Ice takes the water birds and the insects alike; only the crane winters here.
   if (ctx.frozen) return ['crane']
@@ -62,7 +85,8 @@ export function candidates(ctx: SpeciesContext): SpeciesKey[] {
  * `index` is the mark's ordinal, so two events at once get two different residents whenever the
  * moment offers more than one, instead of two identical silhouettes side by side.
  */
-export function pickSpecies(ctx: SpeciesContext, index: number): SpeciesKey {
+export function pickSpecies(ctx: SpeciesContext, index: number, kind: MarkKind = 'event'): SpeciesKey {
+  if (kind === 'task') return taskSpecies(ctx)
   const list = candidates(ctx)
   return list[((index % list.length) + list.length) % list.length] ?? 'duck'
 }

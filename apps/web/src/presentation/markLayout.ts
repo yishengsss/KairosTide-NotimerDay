@@ -82,3 +82,31 @@ export function controlsBox(viewport: { width: number; height: number }): Box {
   const bottom = viewport.height - 22
   return { left: viewport.width / 2 - width / 2, right: viewport.width / 2 + width / 2, top: bottom - height, bottom }
 }
+
+/**
+ * Spots on the bank just above the pond's far shore, for flexible-task residents. Spread from the
+ * middle outwards, clear of `taken` spots and of each other; a spot that does not fit is null.
+ */
+export function layoutShore(region: WaterRegion, count: number, taken: readonly MarkSpot[], radius: number,
+  step = 12): (MarkSpot | null)[] {
+  const { width } = region.viewport
+  const spots: MarkSpot[] = []
+  const xs: number[] = []
+  for (let x = radius; x <= width - radius; x += step) if (region.topAt(x) !== null) xs.push(x)
+  const mid = xs.length ? ((xs[0] ?? 0) + (xs[xs.length - 1] ?? 0)) / 2 : 0
+  xs.sort((left, right) => Math.abs(left - mid) - Math.abs(right - mid))
+  const result: (MarkSpot | null)[] = []
+  for (let i = 0; i < count; i++) {
+    let found: MarkSpot | null = null
+    for (const x of xs) {
+      const y = Math.round((region.topAt(x) ?? 0) - 6)
+      if ([...taken, ...spots].every((other) => Math.hypot(x - other.x, y - other.y) >= radius * 2.6)) {
+        found = { x, y }
+        break
+      }
+    }
+    if (found) spots.push(found)
+    result.push(found)
+  }
+  return result
+}

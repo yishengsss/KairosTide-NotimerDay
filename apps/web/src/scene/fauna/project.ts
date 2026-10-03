@@ -19,7 +19,7 @@ export function projectMarks(marks: readonly FaunaMark[], projection: MarkProjec
   const { dpr, scale, offsetX, offsetY } = projection
   const safe = scale || 1
   return marks.map((mark) => ({
-    id: mark.id,
+    ...mark,
     x: (mark.x * dpr - offsetX) / safe,
     y: (mark.y * dpr - offsetY) / safe,
   }))

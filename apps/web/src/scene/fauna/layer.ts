@@ -8,9 +8,9 @@
 
 import { hash } from '../pastoral/math.ts'
 import { drawSpecies } from './draw.ts'
-import { pickSpecies, type SpeciesContext, type SpeciesKey } from './species.ts'
+import { pickSpecies, type MarkKind, type SpeciesContext, type SpeciesKey } from './species.ts'
 
-export type FaunaMark = { id: string; x: number; y: number }
+export type FaunaMark = { id: string; x: number; y: number; kind?: MarkKind }
 
 /** Arrivals, departures and species changes all fade over this long. */
 export const FADE_SECONDS = 0.6
@@ -24,6 +24,7 @@ const GLIDE_RATE = 3
 
 type Resident = {
   id: string
+  kind: MarkKind
   x: number
   y: number
   targetX: number
@@ -74,11 +75,12 @@ export function createFaunaLayer(): FaunaLayer {
     const seed = idSeed(mark.id)
     return {
       id: mark.id,
+      kind: mark.kind ?? 'event',
       x: mark.x,
       y: mark.y,
       targetX: mark.x,
       targetY: mark.y,
-      species: context ? pickSpecies(context, index) : 'duck',
+      species: context ? pickSpecies(context, index, mark.kind) : 'duck',
       previous: null,
       blend: 1,
       presence: 0,
@@ -126,7 +128,7 @@ export function createFaunaLayer(): FaunaLayer {
         resident.y += (resident.targetY - resident.y) * glide
 
         const index = Math.max(0, order.indexOf(resident.id))
-        const wanted = pickSpecies(input.species, index)
+        const wanted = pickSpecies(input.species, index, resident.kind)
         if (wanted === resident.species) {
           resident.wanted = null
           resident.wantedFor = 0

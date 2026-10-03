@@ -17,6 +17,10 @@ import { loadLocation } from '../environment/location.ts'
 import TimePeek from '../peek/TimePeek.vue'
 import { createLongPress, isBlankTarget } from '../peek/longPress.ts'
 import ScheduleLayer from '../presentation/ScheduleLayer.vue'
+import TaskLayer from '../presentation/TaskLayer.vue'
+import { fetchTasks, moveTask } from '../api/tasks.ts'
+import { createMotivation } from '../tasks/motivation.ts'
+import { createTaskStore } from '../tasks/store.ts'
 import { present } from '../presentation/presenter.ts'
 import AmbientControls from '../scene/AmbientControls.vue'
 import PastoralScene from '../scene/PastoralScene.vue'
@@ -42,7 +46,16 @@ const sync = createSyncEngine({
 })
 
 /** The assistant opens from the farmhouse; a saved draft shows up in the schedule at once. */
-const assistant = createAssistantSession({ onCommitted: () => void sync.refresh() })
+const tasks = createTaskStore({ fetchTasks: () => fetchTasks(), moveTask })
+const motivation = createMotivation(Date.now())
+const visiting = ref<string[]>([])
+
+const assistant = createAssistantSession({
+  onCommitted: () => {
+    void sync.refresh()
+    void tasks.refresh()
+  },
+})
 
 /** Presenter time, refreshed once a second; the edge glow's CSS transition smooths the steps. */
 const now = ref(scheduleClock.now())
@@ -73,9 +86,34 @@ function excuse(id: string, version: number): void {
   sync.excuse(id, version)
 }
 
-/** The scene draws a resident wherever the schedule layer has put a mark. */
-function onMarks(marks: { id: string; x: number; y: number }[]): void {
-  scene.value?.engine?.setMarks(marks)
+type Mark = { id: string; x: number; y: number; kind?: 'event' | 'task' }
+const eventMarks = ref<Mark[]>([])
+const taskMarks = ref<Mark[]>([])
+
+/** The scene draws a resident wherever either layer has put a mark. */
+function pushMarks(): void {
+  scene.value?.engine?.setMarks([...eventMarks.value, ...taskMarks.value])
+}
+
+function onMarks(marks: Mark[]): void {
+  eventMarks.value = marks
+  pushMarks()
+}
+
+function onTaskMarks(marks: Mark[]): void {
+  taskMarks.value = marks
+  pushMarks()
+}
+
+/** The rhythm only runs over a list that was actually read; a failed read brings nobody out. */
+function tickMotivation(): void {
+  const v = view.value
+  const idle = assistant.state.phase === 'closed' && !document.hidden && !v.reminder && !v.conflict
+    && v.cards.every((card) => card.folded)
+  const planned = tasks.state.status === 'ready'
+    ? tasks.state.items.filter((task) => task.lifecycle === 'planned').map((task) => task.taskId)
+    : []
+  visiting.value = motivation.tick(Date.now(), idle, planned)
 }
 
 const press = createLongPress((point) => peek.value?.show(point))
@@ -99,6 +137,8 @@ function onVisibility(): void {
   if (document.hidden) {
     press.cancel()
     peek.value?.dismiss()
+  } else {
+    void tasks.refresh()
   }
 }
 
@@ -107,7 +147,9 @@ onMounted(() => {
   sync.start()
   tick = every(1000, () => {
     now.value = scheduleClock.now()
+    tickMotivation()
   })
+  void tasks.refresh()
   document.addEventListener('visibilitychange', onVisibility)
   // The homepage asks the device where it is, once, on the way in. No control, no guide card: the
   // browser's own prompt is the whole interface, and a refusal is remembered. Nothing waits on it.
@@ -146,6 +188,8 @@ onBeforeUnmount(() => {
       @excuse="excuse"
       @choose="(group, chosen, revision) => sync.decide(group, chosen, revision)"
     />
+    <TaskLayer :store="tasks" :visiting="visiting" :taken="eventMarks" :viewport="viewport"
+      @marks="onTaskMarks" @dismissed="(id) => motivation.dismiss(id)" />
     <TimePeek ref="peek" />
     <HouseEntry v-if="assistant.state.phase === 'closed'" :viewport="viewport" @open="assistant.open()" />
     <AssistantPanel v-else :session="assistant" />
