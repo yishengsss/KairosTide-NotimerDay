@@ -32,7 +32,6 @@ from kairos.domain.draft import (
 
 from ..errors import (
     AssistantUnavailable,
-    ContextTooLarge,
     ConversationConflict,
     NotFound,
     VersionConflict,
@@ -41,6 +40,8 @@ from ..ports import Clock, PendingTurnError, UnitOfWork, UnitOfWorkFactory
 from ..weather import WeatherService
 from . import changes
 from . import tools as whitelist
+from .context import MAX_CONTEXT_MESSAGES as MAX_CONTEXT_MESSAGES
+from .context import build_context as build_context
 from .conversation_types import MessagePage, ToolOutcome, TurnResult
 from .model import AssistantModel, ModelError, ModelMessage, ToolCall, ToolSchema
 from .prompts import SYSTEM_PROMPT, change_notice, draft_notice, summarize_tool_result, turn_context
@@ -49,8 +50,6 @@ from .task_proposals import TASK_WRITE_TOOLS
 from .task_tools import QUERY_FLEXIBLE_TASKS
 from .task_turn import plan_task_draft
 
-MAX_CONTEXT_MESSAGES = 24
-MAX_CONTEXT_CHARS = 32_000
 MAX_CONTENT_CHARS = 4_000
 MAX_CLIENT_MESSAGE_ID = 200
 PAGE_SIZE = 100
@@ -68,33 +67,6 @@ def _message_json(message: ConversationMessage) -> dict[str, Any]:
     return {"message_id": message.message_id, "sequence": message.sequence, "role": message.role,
             "content": message.content, "created_at": message.created_at.isoformat(),
             "action_results": list(message.action_results), "draft_id": message.draft_id}
-
-
-def build_context(messages: Sequence[ConversationMessage]) -> list[ConversationMessage]:
-    """The tail of the transcript the model may see.
-
-    Newest-first walk bounded by both limits, then snapped forward to a user message so the model
-    never sees a reply whose question was cut off. The most recent user message is kept regardless,
-    because dropping the sentence the user just typed would answer the wrong question.
-    """
-    kept: list[ConversationMessage] = []
-    total = 0
-    for message in reversed(messages):
-        size = len(message.content)
-        if kept and (len(kept) >= MAX_CONTEXT_MESSAGES or total + size > MAX_CONTEXT_CHARS):
-            break
-        kept.append(message)
-        total += size
-    kept.reverse()
-    while kept and kept[0].role != "user":
-        kept.pop(0)
-    latest_user = next((item for item in reversed(messages) if item.role == "user"), None)
-    if latest_user is not None:
-        if len(latest_user.content) > MAX_CONTEXT_CHARS:
-            raise ContextTooLarge("这条消息太长，请分成几次说")
-        if all(item.message_id != latest_user.message_id for item in kept):
-            kept = [latest_user]
-    return kept
 
 
 class AssistantService:
