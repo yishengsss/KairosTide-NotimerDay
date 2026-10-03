@@ -6,7 +6,7 @@
  * Query parameters, for reproducible screenshots:
  *   t=2026-06-21T05:10   start instant (device zone)        lat, lon   place
  *   speed=live|day|year  weather=clear|rain|snow|fog|…      shot       no fade-in, no UI
- *   marks=2              stand N anonymous residents on the pond, so the residents of an event can
+ *   marks=2, tasks=2     stand N anonymous residents on the pond, so the residents of an event can
  *                        be photographed across the year without seeding a schedule
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -15,7 +15,7 @@ import { formatClockDate, formatClockTime, realClock } from '../clock/real.ts'
 import { SCENE_SPEEDS, SOLAR_TERM_MS, SPEED_LABEL, createSceneClock, type SceneSpeed } from '../clock/scene.ts'
 import { createLiveEnvironment } from '../environment/live.ts'
 import { loadLocation, makeLocation } from '../environment/location.ts'
-import { controlsBox, layoutMarks } from '../presentation/markLayout.ts'
+import { controlsBox, layoutMarks, layoutShore } from '../presentation/markLayout.ts'
 import { waterRegion } from '../scene/pastoral/geometry.ts'
 import PastoralScene from '../scene/PastoralScene.vue'
 import { every, type Cancel } from '../ui/delay.ts'
@@ -126,17 +126,30 @@ function markReady(): void {
  * Anonymous stand-ins for events under way, placed by the same code the homepage uses. Only the
  * preview page ever does this: the homepage gets its marks from the schedule, never from a URL.
  */
+const clampCount = (value: number): number => Math.max(0, Math.min(6, value || 0))
+const eventCount = ref(clampCount(Number(query.get('marks') ?? 0)))
+const taskCount = ref(clampCount(Number(query.get('tasks') ?? 0)))
+
+function adjust(which: 'event' | 'task', delta: number): void {
+  const target = which === 'event' ? eventCount : taskCount
+  target.value = clampCount(target.value + delta)
+  placeMarks()
+}
+
 function placeMarks(): void {
-  const count = Math.max(0, Math.min(6, Number(query.get('marks') ?? 0) || 0))
+  const count = eventCount.value
   const engine = scene.value?.engine
-  if (!count || !engine) return
+  if (!engine) return
   // CSS pixels, exactly as the schedule layer lays them out: the pond region it uses is the CSS one.
   const viewport = { width: window.innerWidth, height: window.innerHeight }
   const spots = layoutMarks(waterRegion(viewport), count, {
     radius: 26,
     avoid: [controlsBox(viewport)],
   })
-  engine.setMarks(spots.flatMap((spot, index) => (spot ? [{ id: `preview-${index}`, ...spot }] : [])))
+  const events = spots.flatMap((spot, index) => (spot ? [{ id: `preview-${index}`, ...spot }] : []))
+  const shore = layoutShore(waterRegion(viewport), taskCount.value, events, 20)
+  const tasks = shore.flatMap((spot, index) => (spot ? [{ id: `preview-task-${index}`, ...spot, kind: 'task' as const }] : []))
+  engine.setMarks([...events, ...tasks])
 }
 
 function onKey(event: KeyboardEvent): void {
@@ -192,6 +205,14 @@ onBeforeUnmount(() => {
     <div class="row">
       <button v-for="item in PREVIEW_WEATHERS" :key="item" type="button" :class="{ on: weather === item }"
         @click="chooseWeather(item)">{{ WEATHER_LABEL[item] }}</button>
+    </div>
+    <div class="row">
+      <button type="button" @click="adjust('event', -1)">‹</button>
+      <span class="readout">事件 {{ eventCount }}</span>
+      <button type="button" @click="adjust('event', 1)">›</button>
+      <button type="button" @click="adjust('task', -1)">‹</button>
+      <span class="readout">待办 {{ taskCount }}</span>
+      <button type="button" @click="adjust('task', 1)">›</button>
     </div>
     <div class="row">
       <button type="button" :class="{ on: sound }" @click="toggleSound">环境音</button>
