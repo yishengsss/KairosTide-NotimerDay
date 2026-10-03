@@ -1,0 +1,47 @@
+# 依赖与构建产物
+node_modules/
+dist/
+.vite/
+
+# Python 缓存与工具缓存
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 本地数据库（业务事实只在服务端，不入库）
+*.db
+*.sqlite3
+
+# 密钥只放在 services/api/.env：里面有 MIMO_API_KEY，提交进去等于把密钥发给所有人，且仓库历史无法真正清除，所以永不提交
+services/api/.env
+
+# 所有环境变量文件（含 .env.local 等变体）
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Python 虚拟环境
+.venv/
+venv/
+
+# 运行时数据
+services/api/var/
+
+# Agent 记忆与协作文件（只留在本地）
+AGENTS.md
+CLAUDE.md
+docs/memory/
+.ai-memory/
+.claude/
+.codex/
+.cursor/
+
+# 日志与系统文件
+*.log
+.DS_Store
+
+# 文档目录（不上传）
+docs/
