@@ -27,11 +27,20 @@ export type DraftBefore = {
   recurring: boolean
 }
 
+export type Precision = 'date' | 'instant'
+
+/** The saved task a task_change or task_cancel draft acts on. */
+export type TaskBefore = { title: string; deadline: number | null; precision: Precision | null }
+
 export type Draft = {
   draftId: string
   kind: DraftKind
-  /** The saved state before the change; null for a new event. The fields below are the result. */
+  /** The saved event before the change; null for a new event or any task draft. */
   before: DraftBefore | null
+  /** The saved task before the change; null unless this is task_change or task_cancel. */
+  taskBefore: TaskBefore | null
+  deadline: number | null
+  precision: Precision | null
   status: DraftStatus
   digest: string
   title: string | null
@@ -76,17 +85,24 @@ const instant = (value: string | null): number | null => (value === null ? null 
 
 export function draft(dto: DraftDto): Draft {
   const target = dto.target
+  const task = target !== null && 'task_id' in target ? target : null
+  const event = target !== null && 'occurrence_id' in target ? target : null
   return {
     draftId: dto.draft_id,
     kind: dto.kind,
-    before: target
+    taskBefore: task
+      ? { title: task.title, deadline: instant(task.deadline), precision: task.precision }
+      : null,
+    deadline: instant(dto.fields.deadline ?? null),
+    precision: dto.fields.precision ?? null,
+    before: event
       ? {
-          title: target.title,
-          location: target.location,
-          startAt: Date.parse(target.start_at),
-          endAt: Date.parse(target.end_at),
-          wholeSeries: target.scope === 'series',
-          recurring: target.recurring,
+          title: event.title,
+          location: event.location,
+          startAt: Date.parse(event.start_at),
+          endAt: Date.parse(event.end_at),
+          wholeSeries: event.scope === 'series',
+          recurring: event.recurring,
         }
       : null,
     status: dto.status,
@@ -96,7 +112,7 @@ export function draft(dto: DraftDto): Draft {
     timezone: dto.fields.timezone,
     startAt: instant(dto.fields.start_at),
     endAt: instant(dto.fields.end_at),
-    recurring: dto.fields.recurrence !== null || (target?.recurring ?? false),
+    recurring: dto.fields.recurrence !== null || (event?.recurring ?? false),
     missing: [...dto.missing],
     basisPhrase: dto.basis_phrase,
     expiresAt: Date.parse(dto.expires_at),

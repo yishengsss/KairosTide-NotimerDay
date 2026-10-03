@@ -234,12 +234,15 @@
             "$ref": "#/components/schemas/DraftFields"
           },
           "kind": {
-            "description": "create makes a new event; the others act on `target`. `fields` is the result after the change.",
+            "description": "create makes a new event; the others act on `target`. `fields` is the result after the change. The task_* kinds act on a flexible task, which has a deadline instead of a slot.",
             "enum": [
               "create",
               "change",
               "cancel",
-              "excuse"
+              "excuse",
+              "task_create",
+              "task_change",
+              "task_cancel"
             ],
             "title": "Kind",
             "type": "string"
@@ -279,9 +282,13 @@
                 "$ref": "#/components/schemas/DraftTarget"
               },
               {
+                "$ref": "#/components/schemas/TaskTarget"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Target"
           }
         },
         "required": [
@@ -307,6 +314,19 @@
       "DraftFields": {
         "additionalProperties": false,
         "properties": {
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Flexible tasks only: when the user wants it done by.",
+            "title": "Deadline"
+          },
           "end_at": {
             "anyOf": [
               {
@@ -329,6 +349,22 @@
               }
             ],
             "title": "Location"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "date",
+                  "instant"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "date when the user named a day, instant when a clock time was named.",
+            "title": "Precision"
           },
           "recurrence": {
             "anyOf": [
@@ -550,6 +586,84 @@
         "title": "ExceptionRequest",
         "type": "object"
       },
+      "FlexibleTask": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "lifecycle": {
+            "enum": [
+              "planned",
+              "active",
+              "done"
+            ],
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "overdue": {
+            "title": "Overdue",
+            "type": "boolean"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "date",
+                  "instant"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "urgency": {
+            "title": "Urgency",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task_id",
+          "version",
+          "title",
+          "timezone",
+          "lifecycle",
+          "deadline",
+          "precision",
+          "urgency",
+          "overdue"
+        ],
+        "title": "FlexibleTask",
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -563,6 +677,60 @@
           "status"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "LifecycleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "target": {
+            "enum": [
+              "planned",
+              "active",
+              "done"
+            ],
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "expected_version"
+        ],
+        "title": "LifecycleRequest",
+        "type": "object"
+      },
+      "LifecycleResult": {
+        "additionalProperties": false,
+        "properties": {
+          "lifecycle": {
+            "enum": [
+              "planned",
+              "active",
+              "done"
+            ],
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task_id",
+          "lifecycle",
+          "version"
+        ],
+        "title": "LifecycleResult",
         "type": "object"
       },
       "Message": {
@@ -1163,6 +1331,83 @@
           "expected_revision"
         ],
         "title": "SendMessageRequest",
+        "type": "object"
+      },
+      "TaskList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FlexibleTask"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "server_now": {
+            "format": "date-time",
+            "title": "Server Now",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_now",
+          "items"
+        ],
+        "title": "TaskList",
+        "type": "object"
+      },
+      "TaskTarget": {
+        "additionalProperties": false,
+        "description": "The saved flexible task a task_change / task_cancel draft acts on, as it was when made.",
+        "properties": {
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "date",
+                  "instant"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_version": {
+            "title": "Task Version",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "task_version",
+          "title",
+          "deadline",
+          "precision"
+        ],
+        "title": "TaskTarget",
         "type": "object"
       },
       "ToolResult": {
@@ -2154,6 +2399,110 @@
         "summary": "State",
         "tags": [
           "schedule"
+        ]
+      }
+    },
+    "/api/v1/tasks": {
+      "get": {
+        "operationId": "list_tasks_api_v1_tasks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Tasks",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/lifecycle": {
+      "post": {
+        "operationId": "transition_api_v1_tasks__task_id__lifecycle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Transition",
+        "tags": [
+          "tasks"
         ]
       }
     },

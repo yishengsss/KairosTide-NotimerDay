@@ -73,6 +73,9 @@ class TaskService:
         self._uow = uow
         self._clock = clock
 
+    def now(self) -> datetime:
+        return self._clock.now()
+
     def list_tasks(self, owner_id: str) -> list[FlexibleTask]:
         with self._uow(write=False) as uow:
             return uow.tasks.list_tasks(owner_id)

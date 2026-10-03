@@ -212,6 +212,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Tasks */
+        get: operations["list_tasks_api_v1_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Transition */
+        post: operations["transition_api_v1_tasks__task_id__lifecycle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/weather/scene": {
         parameters: {
             query?: never;
@@ -328,10 +362,10 @@ export interface components {
             fields: components["schemas"]["DraftFields"];
             /**
              * Kind
-             * @description create makes a new event; the others act on `target`. `fields` is the result after the change.
+             * @description create makes a new event; the others act on `target`. `fields` is the result after the change. The task_* kinds act on a flexible task, which has a deadline instead of a slot.
              * @enum {string}
              */
-            kind: "create" | "change" | "cancel" | "excuse";
+            kind: "create" | "change" | "cancel" | "excuse" | "task_create" | "task_change" | "task_cancel";
             /** Missing */
             missing: string[];
             /**
@@ -341,14 +375,25 @@ export interface components {
             status: "needs_clarification" | "ready" | "committed" | "superseded" | "discarded";
             /** Superseded By */
             superseded_by: string | null;
-            target: components["schemas"]["DraftTarget"] | null;
+            /** Target */
+            target: components["schemas"]["DraftTarget"] | components["schemas"]["TaskTarget"] | null;
         };
         /** DraftFields */
         DraftFields: {
+            /**
+             * Deadline
+             * @description Flexible tasks only: when the user wants it done by.
+             */
+            deadline?: string | null;
             /** End At */
             end_at: string | null;
             /** Location */
             location: string | null;
+            /**
+             * Precision
+             * @description date when the user named a day, instant when a clock time was named.
+             */
+            precision?: ("date" | "instant") | null;
             recurrence: components["schemas"]["Recurrence"] | null;
             /** Start At */
             start_at: string | null;
@@ -425,6 +470,30 @@ export interface components {
             /** Expected Version */
             expected_version: number;
         };
+        /** FlexibleTask */
+        FlexibleTask: {
+            /** Deadline */
+            deadline: string | null;
+            /**
+             * Lifecycle
+             * @enum {string}
+             */
+            lifecycle: "planned" | "active" | "done";
+            /** Overdue */
+            overdue: boolean;
+            /** Precision */
+            precision: ("date" | "instant") | null;
+            /** Task Id */
+            task_id: string;
+            /** Timezone */
+            timezone: string;
+            /** Title */
+            title: string;
+            /** Urgency */
+            urgency: string;
+            /** Version */
+            version: number;
+        };
         /** Health */
         Health: {
             /**
@@ -432,6 +501,28 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** LifecycleRequest */
+        LifecycleRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "planned" | "active" | "done";
+        };
+        /** LifecycleResult */
+        LifecycleResult: {
+            /**
+             * Lifecycle
+             * @enum {string}
+             */
+            lifecycle: "planned" | "active" | "done";
+            /** Task Id */
+            task_id: string;
+            /** Version */
+            version: number;
         };
         /** Message */
         Message: {
@@ -635,6 +726,32 @@ export interface components {
             expected_revision: number;
             /** Timezone */
             timezone: string;
+        };
+        /** TaskList */
+        TaskList: {
+            /** Items */
+            items: components["schemas"]["FlexibleTask"][];
+            /**
+             * Server Now
+             * Format: date-time
+             */
+            server_now: string;
+        };
+        /**
+         * TaskTarget
+         * @description The saved flexible task a task_change / task_cancel draft acts on, as it was when made.
+         */
+        TaskTarget: {
+            /** Deadline */
+            deadline: string | null;
+            /** Precision */
+            precision: ("date" | "instant") | null;
+            /** Task Id */
+            task_id: string;
+            /** Task Version */
+            task_version: number;
+            /** Title */
+            title: string;
         };
         /** ToolResult */
         ToolResult: {
@@ -1348,6 +1465,81 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScheduleState"];
+                };
+            };
+        };
+    };
+    list_tasks_api_v1_tasks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskList"];
+                };
+            };
+        };
+    };
+    transition_api_v1_tasks__task_id__lifecycle_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LifecycleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LifecycleResult"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

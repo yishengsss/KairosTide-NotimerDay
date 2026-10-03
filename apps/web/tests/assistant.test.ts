@@ -22,7 +22,7 @@ function memoryStorage(initial: Record<string, string> = {}) {
 }
 
 const draft = (overrides: Partial<Draft> = {}): Draft => ({
-  draftId: 'd1', kind: 'create', before: null, status: 'ready', digest: 'dig', title: '组会', location: null, timezone: 'Asia/Shanghai',
+  draftId: 'd1', kind: 'create', before: null, taskBefore: null, deadline: null, precision: null, status: 'ready', digest: 'dig', title: '组会', location: null, timezone: 'Asia/Shanghai',
   startAt: 1, endAt: 2, recurring: false, missing: [], basisPhrase: '周三三点组会',
   expiresAt: Date.now() + 3_600_000, confirmable: true, ...overrides,
 })

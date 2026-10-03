@@ -32,7 +32,21 @@ const KIND = {
   change: { label: '修改', button: '确认修改', done: '已修改' },
   cancel: { label: '删除', button: '确认删除', done: '已删除' },
   excuse: { label: '请假', button: '确认请假', done: '已请假' },
+  task_create: { label: '新待办', button: '确认保存', done: '已存成待办' },
+  task_change: { label: '修改待办', button: '确认修改', done: '已修改' },
+  task_cancel: { label: '取消待办', button: '确认取消', done: '已取消' },
 } as const
+
+const isTask = computed(() => props.draft.kind.startsWith('task_'))
+
+/** A date-precision deadline shows only the day; an instant one shows the clock time too. */
+const due = (value: number | null, precision: string | null): string => {
+  if (value === null) return '不设截止'
+  const day = { month: 'numeric', day: 'numeric', weekday: 'short' } as const
+  const zone = props.draft.timezone ? { timeZone: props.draft.timezone } : {}
+  const extra = precision === 'instant' ? { hour: '2-digit', minute: '2-digit' } as const : {}
+  return new Date(value).toLocaleString('zh-CN', { ...day, ...extra, ...zone }) + (precision === 'date' ? ' 之前' : '')
+}
 
 const kind = computed(() => KIND[props.draft.kind])
 
@@ -72,9 +86,24 @@ const closed = computed(() => {
   <section class="draft" data-interactive aria-label="待确认的草稿">
     <p class="title">
       <span v-if="props.draft.kind !== 'create'" class="kind">{{ kind.label }}</span>
-      {{ props.draft.before?.title ?? props.draft.title ?? '（未命名）' }}
+      {{ props.draft.before?.title ?? props.draft.taskBefore?.title ?? props.draft.title ?? '（未命名）' }}
     </p>
-    <dl v-if="props.draft.kind === 'change'" class="diff">
+    <dl v-if="isTask && props.draft.taskBefore && props.draft.kind === 'task_change'" class="diff">
+      <template v-if="props.draft.taskBefore.title !== props.draft.title">
+        <dt>标题</dt><dd><s>{{ props.draft.taskBefore.title }}</s> → {{ props.draft.title ?? '—' }}</dd>
+      </template>
+      <template v-if="props.draft.taskBefore.deadline !== props.draft.deadline">
+        <dt>截止</dt>
+        <dd><s>{{ due(props.draft.taskBefore.deadline, props.draft.taskBefore.precision) }}</s> → {{ due(props.draft.deadline, props.draft.precision) }}</dd>
+      </template>
+    </dl>
+    <dl v-else-if="isTask && props.draft.taskBefore">
+      <dt>截止</dt><dd>{{ due(props.draft.taskBefore.deadline, props.draft.taskBefore.precision) }}</dd>
+    </dl>
+    <dl v-else-if="isTask">
+      <dt>截止</dt><dd>{{ due(props.draft.deadline, props.draft.precision) }}</dd>
+    </dl>
+    <dl v-else-if="props.draft.kind === 'change'" class="diff">
       <template v-for="row in changes" :key="row.label">
         <dt>{{ row.label }}</dt>
         <dd><s>{{ row.from }}</s> → {{ row.to }}</dd>
