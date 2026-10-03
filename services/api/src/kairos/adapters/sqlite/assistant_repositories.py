@@ -172,12 +172,12 @@ class SqliteDraftRepository:
         self._db.execute(
             "INSERT INTO draft (draft_id, owner_id, conversation_id, source_message_id, status, digest,"
             " anchor_at, expires_at, basis_phrase, fields_json, superseded_by, committed_event_id, created_at,"
-            " updated_at, kind, target_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " updated_at, kind, target_json, items_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (draft.draft_id, draft.owner_id, draft.conversation_id, draft.source_message_id, draft.status,
              draft.digest, _iso(draft.anchor_at), _iso(draft.expires_at), draft.basis_phrase,
              draft.fields_json(), draft.superseded_by, draft.committed_event_id, _iso(draft.created_at),
              _iso(draft.updated_at), draft.kind,
-             json.dumps(draft.target.to_json(), ensure_ascii=False) if draft.target else None))
+             json.dumps(draft.target.to_json(), ensure_ascii=False) if draft.target else None, draft.items_raw))
 
     def get(self, owner_id: str, draft_id: str) -> Draft | None:
         row = self._db.execute("SELECT * FROM draft WHERE owner_id = ? AND draft_id = ?",
@@ -240,7 +240,8 @@ class SqliteDraftRepository:
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]), superseded_by=row["superseded_by"],
             committed_event_id=row["committed_event_id"], kind=row["kind"],
-            target=target_from_json(json.loads(row["target_json"])) if row["target_json"] else None)
+            target=target_from_json(json.loads(row["target_json"])) if row["target_json"] else None,
+            items_raw=row["items_json"])
 
 
 __all__ = [

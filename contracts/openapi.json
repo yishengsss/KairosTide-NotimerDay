@@ -15,6 +15,41 @@
         "title": "AssistantStatus",
         "type": "object"
       },
+      "BatchItem": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/DraftFields"
+          },
+          "kind": {
+            "enum": [
+              "create",
+              "task_create"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "fields",
+          "basis",
+          "missing"
+        ],
+        "title": "BatchItem",
+        "type": "object"
+      },
       "CommitRequest": {
         "additionalProperties": false,
         "properties": {
@@ -35,6 +70,22 @@
             "minLength": 1,
             "title": "Digest",
             "type": "string"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Batch drafts only: indexes of the ticked items.",
+            "title": "Selected"
           }
         },
         "required": [
@@ -53,6 +104,14 @@
           "event_id": {
             "title": "Event Id",
             "type": "string"
+          },
+          "saved_ids": {
+            "description": "Batch drafts: every saved event or task ID.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Saved Ids",
+            "type": "array"
           },
           "status": {
             "const": "committed",
@@ -233,6 +292,21 @@
           "fields": {
             "$ref": "#/components/schemas/DraftFields"
           },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BatchItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Batch drafts only: what was read from the image.",
+            "title": "Items"
+          },
           "kind": {
             "description": "create makes a new event; the others act on `target`. `fields` is the result after the change. The task_* kinds act on a flexible task, which has a deadline instead of a slot.",
             "enum": [
@@ -242,7 +316,8 @@
               "excuse",
               "task_create",
               "task_change",
-              "task_cancel"
+              "task_cancel",
+              "batch"
             ],
             "title": "Kind",
             "type": "string"
@@ -677,6 +752,29 @@
           "status"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "ImageInput": {
+        "additionalProperties": false,
+        "properties": {
+          "data_base64": {
+            "maxLength": 8000000,
+            "minLength": 1,
+            "title": "Data Base64",
+            "type": "string"
+          },
+          "mime_type": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Mime Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mime_type",
+          "data_base64"
+        ],
+        "title": "ImageInput",
         "type": "object"
       },
       "LifecycleRequest": {
@@ -1316,6 +1414,16 @@
             "minimum": 0.0,
             "title": "Expected Revision",
             "type": "integer"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "timezone": {
             "maxLength": 64,

@@ -18,6 +18,7 @@ from hashlib import sha256
 from typing import Any
 from uuid import uuid4
 
+from kairos.domain.batch import items_json
 from kairos.domain.conversation import Conversation, ConversationMessage, ConversationTurn
 from kairos.domain.draft import (
     DRAFT_TTL,
@@ -42,11 +43,12 @@ from ..ports import Clock, PendingTurnError, UnitOfWork, UnitOfWorkFactory
 from ..weather import WeatherService
 from . import changes
 from . import tools as whitelist
+from .batch_tools import IMPORT_FROM_IMAGE, IMPORT_SCHEMA, import_intent, plan_import
 from .context import MAX_CONTEXT_MESSAGES as MAX_CONTEXT_MESSAGES
 from .context import build_context as build_context
 from .conversation_types import MessagePage, ToolOutcome, TurnResult
 from .model import AssistantModel, ModelError, ModelMessage, ToolCall, ToolSchema
-from .prompts import SYSTEM_PROMPT, change_notice, draft_notice, summarize_tool_result, turn_context
+from .prompts import SYSTEM_PROMPT, change_notice, draft_notice, fallback_answer, turn_context
 from .queries import query_events, query_tasks, query_weather
 from .task_proposals import TASK_WRITE_TOOLS
 from .task_tools import QUERY_FLEXIBLE_TASKS
@@ -200,6 +202,8 @@ class AssistantService:
         answer = ""
         used = 0
         tools: Sequence[ToolSchema] = whitelist.SCHEMAS
+        if image is not None and import_intent(turn.content):
+            tools = (*tools, IMPORT_SCHEMA)
         # Looked up this turn; only these may be changed. Events key on occurrence → (event, slot),
         # tasks on task_id → version, kept apart so the two cannot be confused.
         queried: dict[str, tuple[str, str]] = {}
@@ -216,7 +220,7 @@ class AssistantService:
                     outcomes.append(ToolOutcome(call.name, "rejected", "一轮里工具调用太多"))
                     continue
                 used += 1
-                if draft is not None and call.name in whitelist.WRITE_TOOLS:
+                if draft is not None and (call.name in whitelist.WRITE_TOOLS or call.name == IMPORT_FROM_IMAGE):
                     outcomes.append(ToolOutcome(call.name, "rejected", "这一轮已经生成了一份待确认草稿"))
                     continue
                 outcome, created = self._execute(owner_id, conversation_id, turn, call, user_texts,
@@ -227,13 +231,15 @@ class AssistantService:
                 context.append(ModelMessage("tool", json.dumps(outcome.to_json(), ensure_ascii=False),
                                             tool_call_id=call.call_id))
         if not answer:
-            answer = self._fallback_answer(outcomes)
+            answer = fallback_answer(outcomes)
         return self._complete(owner_id, conversation_id, turn, answer, outcomes, draft, now)
 
     def _execute(self, owner_id: str, conversation_id: str, turn: ConversationTurn, call: ToolCall,
                  user_texts: Sequence[str], queried: dict[str, tuple[str, str]],
                  queried_tasks: dict[str, int], now: datetime,
                  from_image: bool = False) -> tuple[ToolOutcome, Draft | None]:
+        if call.name == IMPORT_FROM_IMAGE:
+            return self._import(owner_id, conversation_id, turn, call, from_image, now)
         if call.name not in whitelist.KNOWN_TOOLS:
             return ToolOutcome(call.name, "rejected", "不在允许的工具清单里"), None
         args, problem = whitelist.decode_arguments(call)
@@ -315,16 +321,30 @@ class AssistantService:
                                   proposal.kind, proposal.target)
         return ToolOutcome(tool, "ok", change_notice(proposal.kind), draft_id=draft.draft_id), draft
 
+    def _import(self, owner_id: str, conversation_id: str, turn: ConversationTurn, call: ToolCall,
+                from_image: bool, now: datetime) -> tuple[ToolOutcome, Draft | None]:
+        """One batch draft from the image. Only offered when the user asked to import (M4 §2.2)."""
+        offered = from_image and import_intent(turn.content)
+        with self._uow(write=False) as uow:
+            items, data = plan_import(uow, owner_id, call.arguments, turn.timezone, offered)
+        if not items:
+            return ToolOutcome(call.name, "rejected", data), None
+        fields = DraftFields(None, turn.timezone, None, None)
+        draft = self._store_draft(owner_id, conversation_id, turn, fields,
+                                  [IMAGE_BASIS.rstrip("：")], "ready", now, "batch", None, items_json(items))
+        return ToolOutcome(call.name, "ok", data, draft_id=draft.draft_id), draft
+
     def _store_draft(self, owner_id: str, conversation_id: str, turn: ConversationTurn, fields: DraftFields,
                      fragments: Sequence[str], status: DraftStatus, now: datetime, kind: DraftKind = "create",
-                     target: Target | None = None) -> Draft:
+                     target: Target | None = None, items_raw: str | None = None) -> Draft:
         phrase = whitelist.BASIS_JOINER.join(fragments)
         draft_id = _id("drf")
         draft = Draft(draft_id=draft_id, owner_id=owner_id, conversation_id=conversation_id,
                       source_message_id=turn.user_message_id, status=status,
-                      digest=compute_digest(draft_id, fields, phrase, kind, target), anchor_at=turn.created_at,
+                      digest=compute_digest(draft_id, fields, phrase, kind, target, items_raw),
+                      anchor_at=turn.created_at,
                       expires_at=now + DRAFT_TTL, basis_phrase=phrase, fields=fields, created_at=now,
-                      updated_at=now, kind=kind, target=target)
+                      updated_at=now, kind=kind, target=target, items_raw=items_raw)
         with self._uow(write=True) as uow:
             previous = uow.drafts.live(owner_id, conversation_id)
             if previous is not None:
@@ -360,15 +380,6 @@ class AssistantService:
     def _next_sequence(uow: UnitOfWork, owner_id: str, conversation_id: str) -> int:
         latest = uow.messages.latest(owner_id, conversation_id)
         return 0 if latest is None else latest.sequence + 1
-
-    @staticmethod
-    def _fallback_answer(outcomes: Sequence[ToolOutcome]) -> str:
-        if not outcomes:
-            return "我在听。你可以直接说要安排什么，或者问你这周的固定日程、某个城市的天气。"
-        last = outcomes[-1]
-        if last.status == "ok":
-            return summarize_tool_result(last.name, last.status, last.data)
-        return f"这次没有做成：{last.data}"
 
     @staticmethod
     def _require(uow: UnitOfWork, owner_id: str, conversation_id: str) -> Conversation:

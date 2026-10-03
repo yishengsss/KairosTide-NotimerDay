@@ -5,8 +5,15 @@ the user decides conflicts, nothing is invented, and the model is a conversation
 than the system's controller.
 """
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+if TYPE_CHECKING:
+    from kairos.domain.batch import BatchItem
+
+    from .conversation_types import ToolOutcome
 
 SYSTEM_PROMPT = """\
 你是「田园四时」里的助手 Kairos。你帮用户看他的固定日程、看天气、把他说出的安排整理成一份待确认的草稿。
@@ -48,6 +55,9 @@ SYSTEM_PROMPT = """\
    冲突卡片上选保留哪一条（没选中的那条这一次记为错过，不需要再删）；柔性任务卡片上标记开始、完成或撤销。
 10. 你也不负责分类。判断用户说的是固定日程还是柔性任务，是你自己的理解工作，不需要引用规则条文。
    如果确实拿不准，就问一句，而不是硬猜。
+11. 用户发来图片（课表、通知、截图）时，图片就是依据。用户只问图里有什么时，照实描述，再问要不要导入。
+   用户要你导入，或在你问过之后说「好的」，调用 import_from_image，把图上的固定日程（event）和待办（task）
+   一次放进 items，每条摘抄图上对应的原文作 basis。看不清的日期、时刻留空，不要猜。冲突照实说出，由用户决定。
 
 语气：简短、平和、像同一个村子里的人说话。不要用「亲」「~」这类语气词，也不要用列表堆砌废话。
 一次回答最多三四句话。用户是用中文跟你说话的，除非他用别的语言，否则一律用中文回答。
@@ -101,6 +111,14 @@ def task_draft_notice(status: str, kind: str, missing: tuple[str, ...]) -> str:
     return "这是整理好的任务草稿，核对无误后点「确认保存」才会存成待办。"
 
 
+def batch_notice(items: "Sequence[BatchItem]") -> str:
+    ready = sum(1 for item in items if item.selectable)
+    waiting = len(items) - ready
+    tail = f"，另有 {waiting} 条看不清时间、需要补全" if waiting else ""
+    return (f"从图片里整理出 {len(items)} 条，{ready} 条可以直接保存{tail}。卡片上默认全选，"
+            "取消不要的再点「保存所选」才会写入。")
+
+
 NO_BASIS_NOTICE = "我没有在你说的话里找到这条安排的依据，所以没有生成草稿。请直接说出时间、时长和要做的事，我再整理。"
 REJECTED_NOTICE = "这条请求我没有执行：{reason}。你可以换个说法再说一次。"
 NO_MODEL_NOTICE = "助手现在没有配置模型，暂时不能对话。"
@@ -112,7 +130,7 @@ def summarize_tool_result(name: str, status: str, data: object) -> str:
         return f"{name}：{data}"
     if name in ("create_rigid_event_draft", "propose_event_change", "propose_event_cancel",
                 "propose_event_excuse", "create_flexible_task_draft", "propose_task_change",
-                "propose_task_cancel"):
+                "propose_task_cancel", "import_from_image"):
         return "已生成待确认草稿"
     if name == "query_rigid_events":
         count = len(data) if isinstance(data, list) else 0
@@ -123,3 +141,13 @@ def summarize_tool_result(name: str, status: str, data: object) -> str:
     if name == "query_weather":
         return f"查到天气：{data}"
     return name
+
+
+def fallback_answer(outcomes: "Sequence[ToolOutcome]") -> str:
+    """What to say when the model gave tool calls but no text of its own."""
+    if not outcomes:
+        return "我在听。你可以直接说要安排什么，或者问你这周的固定日程、某个城市的天气。"
+    last = outcomes[-1]
+    if last.status == "ok":
+        return summarize_tool_result(last.name, last.status, last.data)
+    return f"这次没有做成：{last.data}"

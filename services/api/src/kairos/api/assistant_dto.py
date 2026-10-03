@@ -60,6 +60,13 @@ class DraftFields(Strict):
         default=None, description="date when the user named a day, instant when a clock time was named.")
 
 
+class BatchItem(Strict):
+    kind: Literal["create", "task_create"]
+    fields: DraftFields
+    basis: str
+    missing: list[str]
+
+
 class DraftTarget(Strict):
     """The saved instance a change draft acts on, as it was when the draft was made."""
 
@@ -101,10 +108,11 @@ class Draft(Strict):
     expired: bool
     confirmable: bool
     kind: Literal["create", "change", "cancel", "excuse",
-                  "task_create", "task_change", "task_cancel"] = Field(
+                  "task_create", "task_change", "task_cancel", "batch"] = Field(
         description="create makes a new event; the others act on `target`. `fields` is the result after the change."
                     " The task_* kinds act on a flexible task, which has a deadline instead of a slot.")
     target: DraftTarget | TaskTarget | None
+    items: list[BatchItem] | None = Field(default=None, description="Batch drafts only: what was read from the image.")
 
 
 class TurnResult(Strict):
@@ -140,12 +148,15 @@ class MessagePage(Strict):
 class CommitRequest(Strict):
     digest: str = Field(min_length=1, max_length=128)
     conflict_acceptance: str | None = Field(default=None, max_length=128)
+    selected: list[int] | None = Field(default=None, max_length=20,
+                                       description="Batch drafts only: indexes of the ticked items.")
 
 
 class CommitResult(Strict):
     draft_id: str
     event_id: str
     status: Literal["committed"]
+    saved_ids: list[str] = Field(default_factory=list, description="Batch drafts: every saved event or task ID.")
 
 
 class DiscardResult(Strict):

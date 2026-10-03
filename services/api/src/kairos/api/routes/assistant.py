@@ -54,7 +54,8 @@ def draft(draft_id: str, svc: ServicesDep) -> dto.Draft:
 
 @router.post("/drafts/{draft_id}/commit", response_model=dto.CommitResult, responses=ERRORS)
 def commit(draft_id: str, body: dto.CommitRequest, key: IdempotencyKey, svc: ServicesDep) -> dto.CommitResult:
-    result = svc.drafts.commit(svc.owner_id, draft_id, body.digest, key, body.conflict_acceptance)
+    result = svc.drafts.commit(svc.owner_id, draft_id, body.digest, key, body.conflict_acceptance,
+                             body.selected)
     return dto.CommitResult.model_validate(result.to_json())
 
 

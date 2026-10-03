@@ -26,6 +26,7 @@ from ..idempotency import once
 from ..ports import Clock, UnitOfWork, UnitOfWorkFactory
 from ..tasks import apply_task_draft
 from .apply import apply_draft
+from .batch_commit import apply_batch
 
 
 @dataclass(frozen=True)
@@ -33,9 +34,11 @@ class CommitResult:
     draft_id: str
     event_id: str
     status: str
+    saved_ids: tuple[str, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
-        return {"draft_id": self.draft_id, "event_id": self.event_id, "status": self.status}
+        return {"draft_id": self.draft_id, "event_id": self.event_id, "status": self.status,
+                "saved_ids": list(self.saved_ids)}
 
 
 def event_id_for(draft_id: str) -> str:
@@ -95,12 +98,18 @@ class DraftService:
         self._clock = clock
 
     def commit(self, owner_id: str, draft_id: str, digest: str, key: str,
-               conflict_acceptance: str | None = None) -> CommitResult:
+               conflict_acceptance: str | None = None, selected: list[int] | None = None) -> CommitResult:
         now = self._clock.now()
-        payload = {"draft_id": draft_id, "digest": digest, "conflict_acceptance": conflict_acceptance}
+        payload = {"draft_id": draft_id, "digest": digest, "conflict_acceptance": conflict_acceptance,
+                   "selected": selected}
         with self._uow(write=True) as uow:
             def act() -> dict[str, Any]:
                 draft = self._confirmable(uow, owner_id, draft_id, digest, now)
+                if draft.kind == "batch":
+                    ids = apply_batch(uow, draft, selected, conflict_acceptance, now)
+                    uow.drafts.commit_draft(owner_id, draft_id, digest, ids[0], now)
+                    uow.audit.record(owner_id, "draft_committed", draft_id, now)
+                    return CommitResult(draft_id, ids[0], "committed", tuple(ids)).to_json()
                 if draft.kind in TASK_KINDS:
                     task_id = apply_task_draft(uow, draft, now)
                     uow.drafts.commit_draft(owner_id, draft_id, digest, task_id, now)
@@ -130,7 +139,8 @@ class DraftService:
 
             result = once(uow, owner_id, "draft_commit", key, payload, act, now)
             uow.commit()
-        return CommitResult(result["draft_id"], result["event_id"], result["status"])
+        return CommitResult(result["draft_id"], result["event_id"], result["status"],
+                            tuple(result.get("saved_ids", ())))
 
     def discard(self, owner_id: str, draft_id: str, key: str) -> dict[str, Any]:
         now = self._clock.now()

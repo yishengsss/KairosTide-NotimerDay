@@ -35,6 +35,7 @@ const KIND = {
   task_create: { label: '新待办', button: '确认保存', done: '已存成待办' },
   task_change: { label: '修改待办', button: '确认修改', done: '已修改' },
   task_cancel: { label: '取消待办', button: '确认取消', done: '已取消' },
+  batch: { label: '图片导入', button: '保存所选', done: '已保存所选' },
 } as const
 
 const isTask = computed(() => props.draft.kind.startsWith('task_'))

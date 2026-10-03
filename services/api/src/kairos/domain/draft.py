@@ -21,7 +21,7 @@ from .tasks import Precision, TaskTarget
 DraftStatus = Literal["needs_clarification", "ready", "committed", "superseded", "discarded"]
 # create: a new event. change / cancel / excuse: act on one saved instance or, when the user said so, its series.
 # task_*: the same three moves on a flexible task, which has a title and maybe a deadline but no slot.
-DraftKind = Literal["create", "change", "cancel", "excuse", "task_create", "task_change", "task_cancel"]
+DraftKind = Literal["create", "change", "cancel", "excuse", "task_create", "task_change", "task_cancel", "batch"]
 TASK_KINDS: tuple[DraftKind, ...] = ("task_create", "task_change", "task_cancel")
 Scope = Literal["occurrence", "series"]
 
@@ -54,7 +54,7 @@ class DraftFields:
             absent.append("title")
         if not self.timezone:
             absent.append("timezone")
-        if kind in TASK_KINDS:
+        if kind in TASK_KINDS or kind == "batch":
             return tuple(absent)
         if self.start_at is None:
             absent.append("start_at")
@@ -255,6 +255,8 @@ class Draft:
     committed_event_id: str | None = None
     kind: DraftKind = "create"
     target: Target | None = None
+    items_raw: str | None = None
+    """Batch drafts only: the items as JSON (see `domain.batch`). Kept raw to avoid an import cycle."""
 
     def expired(self, now: datetime) -> bool:
         return now >= self.expires_at
@@ -278,6 +280,7 @@ class Draft:
             "committed_event_id": self.committed_event_id,
             "kind": self.kind,
             "target": self.target.to_json() if self.target else None,
+            "items": json.loads(self.items_raw) if self.items_raw else None,
         }
 
     def fields_json(self) -> str:
@@ -298,7 +301,7 @@ def fields_from_json(raw: Mapping[str, Any]) -> DraftFields:
 
 
 def compute_digest(draft_id: str, fields: DraftFields, basis_phrase: str, kind: DraftKind = "create",
-                   target: Target | None = None) -> str:
+                   target: Target | None = None, items_raw: str | None = None) -> str:
     """Digest of exactly what the user was shown. Confirmations carry it, so a tampered or stale copy
     cannot be committed even if it reaches the endpoint. Kind and target are part of it, so the scope
     of a change cannot be swapped after the user saw the card."""
@@ -306,6 +309,8 @@ def compute_digest(draft_id: str, fields: DraftFields, basis_phrase: str, kind: 
     if kind != "create":
         content["kind"] = kind
         content["target"] = target.to_json() if target else None
+    if items_raw is not None:
+        content["items"] = json.loads(items_raw)
     payload = json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(payload.encode()).hexdigest()
 

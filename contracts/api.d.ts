@@ -272,12 +272,30 @@ export interface components {
             /** Available */
             available: boolean;
         };
+        /** BatchItem */
+        BatchItem: {
+            /** Basis */
+            basis: string;
+            fields: components["schemas"]["DraftFields"];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "create" | "task_create";
+            /** Missing */
+            missing: string[];
+        };
         /** CommitRequest */
         CommitRequest: {
             /** Conflict Acceptance */
             conflict_acceptance?: string | null;
             /** Digest */
             digest: string;
+            /**
+             * Selected
+             * @description Batch drafts only: indexes of the ticked items.
+             */
+            selected?: number[] | null;
         };
         /** CommitResult */
         CommitResult: {
@@ -285,6 +303,11 @@ export interface components {
             draft_id: string;
             /** Event Id */
             event_id: string;
+            /**
+             * Saved Ids
+             * @description Batch drafts: every saved event or task ID.
+             */
+            saved_ids?: string[];
             /**
              * Status
              * @constant
@@ -361,11 +384,16 @@ export interface components {
             expires_at: string;
             fields: components["schemas"]["DraftFields"];
             /**
+             * Items
+             * @description Batch drafts only: what was read from the image.
+             */
+            items?: components["schemas"]["BatchItem"][] | null;
+            /**
              * Kind
              * @description create makes a new event; the others act on `target`. `fields` is the result after the change. The task_* kinds act on a flexible task, which has a deadline instead of a slot.
              * @enum {string}
              */
-            kind: "create" | "change" | "cancel" | "excuse" | "task_create" | "task_change" | "task_cancel";
+            kind: "create" | "change" | "cancel" | "excuse" | "task_create" | "task_change" | "task_cancel" | "batch";
             /** Missing */
             missing: string[];
             /**
@@ -501,6 +529,13 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** ImageInput */
+        ImageInput: {
+            /** Data Base64 */
+            data_base64: string;
+            /** Mime Type */
+            mime_type: string;
         };
         /** LifecycleRequest */
         LifecycleRequest: {
@@ -724,6 +759,7 @@ export interface components {
             content: string;
             /** Expected Revision */
             expected_revision: number;
+            image?: components["schemas"]["ImageInput"] | null;
             /** Timezone */
             timezone: string;
         };
