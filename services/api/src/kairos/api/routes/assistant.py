@@ -2,6 +2,9 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
+from kairos.application.errors import InvalidRequest
+from kairos.application.image_input import ImageValidationError, validate_image
+
 from .. import assistant_dto as dto
 from ..deps import IdempotencyKey, ServicesDep
 from ..dto import ErrorResponse
@@ -33,8 +36,14 @@ def history(conversation_id: str, svc: ServicesDep,
 
 @router.post("/conversations/{conversation_id}/messages", response_model=dto.TurnResult, responses=ERRORS)
 def send(conversation_id: str, body: dto.SendMessageRequest, svc: ServicesDep) -> dto.TurnResult:
+    image = None
+    if body.image is not None:
+        try:
+            image = validate_image(body.image.mime_type, body.image.data_base64)
+        except ImageValidationError as error:
+            raise InvalidRequest(f"图片无法使用：{error}") from None
     result = svc.assistant.send(svc.owner_id, conversation_id, body.client_message_id, body.content,
-                                body.timezone, body.expected_revision)
+                                body.timezone, body.expected_revision, image)
     return dto.TurnResult.model_validate(result.to_json())
 
 

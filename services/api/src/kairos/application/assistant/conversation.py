@@ -12,6 +12,7 @@ Ordering rules that exist for a reason:
 
 import json
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime
 from hashlib import sha256
 from typing import Any
@@ -36,6 +37,7 @@ from ..errors import (
     NotFound,
     VersionConflict,
 )
+from ..image_input import ValidatedImage
 from ..ports import Clock, PendingTurnError, UnitOfWork, UnitOfWorkFactory
 from ..weather import WeatherService
 from . import changes
@@ -53,6 +55,7 @@ from .task_turn import plan_task_draft
 MAX_CONTENT_CHARS = 4_000
 MAX_CLIENT_MESSAGE_ID = 200
 PAGE_SIZE = 100
+IMAGE_BASIS = "来自图片："
 
 
 def _id(prefix: str) -> str:
@@ -118,7 +121,8 @@ class AssistantService:
     # ------------------------------------------------------------------ a turn
 
     def send(self, owner_id: str, conversation_id: str, client_message_id: str, content: str,
-             timezone: str, expected_revision: int) -> TurnResult:
+             timezone: str, expected_revision: int, image: ValidatedImage | None = None) -> TurnResult:
+        """`image` reaches the model for this turn only; just its hash is kept, for replay checks."""
         content = content.strip()
         if not content or len(content) > MAX_CONTENT_CHARS:
             raise ConversationConflict(f"内容长度必须是 1..{MAX_CONTENT_CHARS} 字")
@@ -126,14 +130,15 @@ class AssistantService:
             raise ConversationConflict(f"client_message_id 长度必须是 1..{MAX_CLIENT_MESSAGE_ID}")
         if self._model is None:
             raise AssistantUnavailable("no model is configured")
-        request_hash = _hash((content, timezone, str(expected_revision)))
+        request_hash = _hash((content, timezone, str(expected_revision))
+                             + ((image.sha256,) if image else ()))
         replay, turn = self._reserve(owner_id, conversation_id, client_message_id, content, request_hash,
                                      timezone, expected_revision)
         if replay is not None:
             return replay
         assert turn is not None
         try:
-            return self._run_turn(owner_id, conversation_id, turn)
+            return self._run_turn(owner_id, conversation_id, turn, image)
         except ModelError as error:
             # The turn stays pending on purpose: the same client message ID can retry it.
             raise AssistantUnavailable(str(error)) from error
@@ -175,7 +180,8 @@ class AssistantService:
             uow.commit()
             return None, turn
 
-    def _run_turn(self, owner_id: str, conversation_id: str, turn: ConversationTurn) -> TurnResult:
+    def _run_turn(self, owner_id: str, conversation_id: str, turn: ConversationTurn,
+                  image: ValidatedImage | None = None) -> TurnResult:
         assert self._model is not None
         now = self._clock.now()
         with self._uow(write=False) as uow:
@@ -186,6 +192,8 @@ class AssistantService:
         context.extend(ModelMessage("user" if item.role == "user" else "assistant", item.content)
                        for item in build_context(history))
         user_texts = [item.content for item in context if item.role == "user"]
+        if image is not None and context[-1].role == "user":
+            context[-1] = replace(context[-1], image_url=image.data_url)
 
         outcomes: list[ToolOutcome] = []
         draft: Draft | None = None
@@ -212,7 +220,7 @@ class AssistantService:
                     outcomes.append(ToolOutcome(call.name, "rejected", "这一轮已经生成了一份待确认草稿"))
                     continue
                 outcome, created = self._execute(owner_id, conversation_id, turn, call, user_texts,
-                                                 queried, queried_tasks, now)
+                                                 queried, queried_tasks, now, image is not None)
                 outcomes.append(outcome)
                 if created is not None:
                     draft = created
@@ -224,7 +232,8 @@ class AssistantService:
 
     def _execute(self, owner_id: str, conversation_id: str, turn: ConversationTurn, call: ToolCall,
                  user_texts: Sequence[str], queried: dict[str, tuple[str, str]],
-                 queried_tasks: dict[str, int], now: datetime) -> tuple[ToolOutcome, Draft | None]:
+                 queried_tasks: dict[str, int], now: datetime,
+                 from_image: bool = False) -> tuple[ToolOutcome, Draft | None]:
         if call.name not in whitelist.KNOWN_TOOLS:
             return ToolOutcome(call.name, "rejected", "不在允许的工具清单里"), None
         args, problem = whitelist.decode_arguments(call)
@@ -234,9 +243,12 @@ class AssistantService:
             fragments, problem = whitelist.basis_fragments(args)
             if fragments is None:
                 return ToolOutcome(call.name, "rejected", problem or "缺少依据"), None
-            missing = whitelist.fragments_problem(fragments, user_texts)
+            # On an image turn the picture is the basis (M4 §2.2): quotes come from it, not the user.
+            missing = None if from_image else whitelist.fragments_problem(fragments, user_texts)
             if missing is not None:
                 return ToolOutcome(call.name, "rejected", missing), None
+            if from_image:
+                fragments = tuple(f"{IMAGE_BASIS}{item}" for item in fragments)
             changing = call.name in whitelist.CHANGE_TOOLS
             reason = changes.veto_reason(turn.content) if changing else whitelist.veto_reason(turn.content)
             if reason is not None:
@@ -252,7 +264,7 @@ class AssistantService:
         phrase = args.get("basis_phrase")
         if not isinstance(phrase, str):
             return ToolOutcome(call.name, "rejected", "缺少 basis_phrase，无法核对依据"), None
-        missing = whitelist.basis_problem(phrase, user_texts)
+        missing = None if from_image else whitelist.basis_problem(phrase, user_texts)
         if missing is not None:
             return ToolOutcome(call.name, "rejected", missing), None
         if call.name == QUERY_FLEXIBLE_TASKS:

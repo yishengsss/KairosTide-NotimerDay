@@ -20,6 +20,12 @@ class SendMessageRequest(Strict):
     content: str = Field(min_length=1, max_length=4000)
     timezone: str = Field(min_length=1, max_length=64)
     expected_revision: int = Field(ge=0)
+    image: "ImageInput | None" = None
+
+
+class ImageInput(Strict):
+    mime_type: str = Field(min_length=1, max_length=40)
+    data_base64: str = Field(min_length=1, max_length=8_000_000)
 
 
 class ToolResult(Strict):

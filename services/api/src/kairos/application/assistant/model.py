@@ -33,14 +33,24 @@ class ModelMessage:
     content: str
     tool_calls: tuple["ToolCall", ...] = ()
     tool_call_id: str | None = None
+    image_url: str | None = None
+    """A `data:` URL sent to the model for this turn only. It is never stored or logged."""
 
     def to_json(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {"role": self.role, "content": self.content}
+        content: Any = self.content
+        if self.image_url is not None:
+            content = [{"type": "image_url", "image_url": {"url": self.image_url}},
+                       {"type": "text", "text": self.content}]
+        payload: dict[str, Any] = {"role": self.role, "content": content}
         if self.tool_calls:
             payload["tool_calls"] = [call.to_json() for call in self.tool_calls]
         if self.tool_call_id is not None:
             payload["tool_call_id"] = self.tool_call_id
         return payload
+
+    def __repr__(self) -> str:  # keep image bytes out of tracebacks and logs
+        image = ", image=<redacted>" if self.image_url else ""
+        return f"ModelMessage(role={self.role!r}, content={self.content!r}{image})"
 
 
 @dataclass(frozen=True)
