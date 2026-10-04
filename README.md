@@ -19,6 +19,7 @@
 ---
 
 ## 目录
+<img width="1024" height="1536" alt="985d719bc49e2a90c842f16ffccc147c" src="https://github.com/user-attachments/assets/17ff3959-ea61-49ad-bf45-af4a02697c59" />
 
 - [这是什么](#这是什么)
 - [核心体验](#核心体验)
