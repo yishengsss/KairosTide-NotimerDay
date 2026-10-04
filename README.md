@@ -19,8 +19,6 @@
 ---
 
 ## 目录
-<img width="1024" height="1536" alt="985d719bc49e2a90c842f16ffccc147c" src="https://github.com/user-attachments/assets/17ff3959-ea61-49ad-bf45-af4a02697c59" />
-
 - [这是什么](#这是什么)
 - [核心体验](#核心体验)
 - [里程碑](#里程碑)
@@ -32,13 +30,12 @@
 - [HTTP 接口一览](#http-接口一览)
 - [设计原则](#设计原则)
 - [当前状态](#当前状态)
-
 ---
 
 ## 这是什么
 
 KairosTide是一个**弱化钟表的自然场景**，而不是日历、待办或倒计时工具：用户从太阳、天空、月亮、云、水面和光线感知时间流动，平时不显示当前时间、时间轴、下一事件或剩余分钟数。
-
+<img width="1024" height="1536" alt="985d719bc49e2a90c842f16ffccc147c" src="https://github.com/user-attachments/assets/17ff3959-ea61-49ad-bf45-af4a02697c59" />
 > 首页只有两个自动隐藏的控件：**环境音**（默认关闭）和**全屏**。
 
 ## 核心体验
